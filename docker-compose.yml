@@ -1,0 +1,76 @@
+services:
+  # Frontend application
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - NODE_ENV=production
+    container_name: flight-search-app
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - VITE_AMADEUS_API_KEY=${VITE_AMADEUS_API_KEY}
+      - VITE_AMADEUS_API_SECRET=${VITE_AMADEUS_API_SECRET}
+      - VITE_AMADEUS_API_URL=${VITE_AMADEUS_API_URL}
+      - VITE_ENABLE_MOCK_DATA=${VITE_ENABLE_MOCK_DATA:-true}
+    env_file:
+      - .env
+    restart: unless-stopped
+    networks:
+      - flight-network
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "--spider",
+          "http://localhost:3000",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.flight-app.rule=Host(`flightfinder.local`)"
+      - "traefik.http.services.flight-app.loadbalancer.server.port=3000"
+
+  # Nginx reverse proxy (optional)
+  nginx:
+    image: nginx:alpine
+    container_name: flight-search-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - app
+    restart: unless-stopped
+    networks:
+      - flight-network
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "--spider",
+          "http://localhost/health",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+networks:
+  flight-network:
+    driver: bridge
+
+volumes:
+  node_modules:
